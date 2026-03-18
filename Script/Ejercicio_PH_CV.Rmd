@@ -1,0 +1,152 @@
+---
+title: "Talle_2_Precios_Hedonicos_Costo_Viaje"
+author: "VIAFARA MORALES, JORGE ELIECER"
+date: "2026-03-18"
+output: html_document
+---
+
+### Instalación de paquetes
+
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+#Limpiar la consola
+cat("\f")
+
+#Limpiar el Global Environment
+rm(list = ls())
+
+#Incluir las librerias
+if(!require(pacman)) install.packages("pacman") ; require(pacman)
+p_load(haven,        #Leer archivos .dta
+       dplyr,        #Manipular datos
+       stargazer,    #Visualizar tablas de regresión
+       fixest,       #Calcular los efectos fijos
+       plm,          #Datos de panel
+       knitr,        #Visualizar tablas adicionales
+       ivreg,        #Regresiones por variables instrumentales
+       broom,        #Extraer resultados de regresiones
+       AER,          #Regresiones por variables instrumentales
+       sandwich,     #Errores estándar robustos
+       lmtest,       #Pruebas estadísticas
+       kableExtra,   #Tablas avanzadas
+       tidyverse,    #Conjunto de paquetes para ciencia de datos
+       modelsummary, #Resumir modelos
+       ggplot2,      #Gráficos
+       rddensity,    #Test de McCrary
+       readxl,       #Leer archivos Excel
+       rio,         #Importar/exportar datos múltiples formatos
+       knitr,        #Tablas dinámicas
+       magick,       #Convertir tabla en PNG
+       webshot2,      #Guardar tablas como gráficos
+       tynitex,       #Compila documentos en Latex
+       pdftools,      #Leer archivos en PDF
+       tidyr,         #Manipulación de datos
+       mass          #Función box-cox
+      )
+```
+
+### Lectura del archivo .xls
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+
+# Definir URL del archivo en GitHub
+github_url <- "https://raw.githubusercontent.com/GeorgeWton1986/Ejer2_PH_CV/main/Data/1_BaseCasas2001.xls"
+
+temp_file <- tempfile(fileext = ".xls")
+download.file(github_url, temp_file, mode = "wb")
+
+# Cargar datos usando readxl
+df <- read_excel(temp_file)
+```
+### Limpieza y transformación de datos
+```{r pressure, echo=FALSE}
+
+# Variable dependiente
+df <- df %>% mutate(ln_precio = log(VALORVENTA))
+
+# NROCUARTOS, NROBANOS, NROGARAJES → numérico
+df <- df %>%
+  mutate(
+    cuartos  = case_when(
+      NROCUARTOS == "5 o más" ~ 5,
+      NROCUARTOS == "4 o más" ~ 4,
+      TRUE ~ as.numeric(NROCUARTOS)
+    ),
+    banos    = case_when(
+      NROBANOS == "5 o más" ~ 5,
+      NROBANOS == "4 o más" ~ 4,
+      TRUE ~ as.numeric(NROBANOS)
+    ),
+    garajes  = case_when(
+      NROGARAJES == "3 o más" ~ 3,
+      TRUE ~ as.numeric(NROGARAJES)
+    )
+  )
+
+# TIPOGARAJE → dummy independiente
+df <- df %>%
+  mutate(garaje_indep = ifelse(TIPOGARAJE == "Independiente", 1, 0))
+
+# TIEMPOCONSTRUIDO → dummies (referencia: Más de 20 años)
+df <- df %>%
+  mutate(
+    t_sobreplano = ifelse(TIEMPOCONSTRUIDO == "Sobre plano", 1, 0),
+    t_estrenar   = ifelse(TIEMPOCONSTRUIDO == "Para estrenar", 1, 0),
+    t_0_5        = ifelse(TIEMPOCONSTRUIDO == "Entre 0 y 5 años", 1, 0),
+    t_5_10       = ifelse(TIEMPOCONSTRUIDO == "Entre 5 y 10 años", 1, 0),
+    t_10_20      = ifelse(TIEMPOCONSTRUIDO == "Entre 10 y 20 años", 1, 0),
+    t_remodelado = ifelse(TIEMPOCONSTRUIDO == "Remodelado", 1, 0)
+  )
+
+# ESTRATO → dummies (referencia: estrato 1)
+df <- df %>%
+  mutate(
+    est2 = ifelse(ESTRATO == 2, 1, 0),
+    est3 = ifelse(ESTRATO == 3, 1, 0),
+    est4 = ifelse(ESTRATO == 4, 1, 0),
+    est5 = ifelse(ESTRATO == 5, 1, 0),
+    est6 = ifelse(ESTRATO == 6, 1, 0)
+  )
+
+# Variables S/N → dummy (S=1, resto=0)
+sn_vars <- c("CONBALCON","CONCANCHASQUASH","CONGIMNASIO","CONJARDININTERIOR",
+             "CONJAULAGOLF","CONPISCINA","CONSAUNA","CONZONANINOS",
+             "CONZONASVERDES","ENCONJUNTOCERRADO","SOBREVIAPRINCIPAL","SOBREVIASECUNDARIA")
+
+for (v in sn_vars) {
+  df[[paste0("d_", tolower(v))]] <- ifelse(df[[v]] == "S", 1, 0)
+}
+```
+
+### Modelos
+```{r pressure, echo=FALSE}
+# ---- 3. MODELOS ----
+
+# Modelo 1: Lineal
+m1 <- lm(VALORVENTA ~ AREA + cuartos + banos + garajes + garaje_indep +
+           VALORADMON + t_sobreplano + t_estrenar + t_0_5 + t_5_10 +
+           t_10_20 + t_remodelado +
+           d_conbalcon + d_concanchasquash + d_congimnasio +
+           d_conjardininterior + d_conjaulagolf + d_conpiscina +
+           d_consauna + d_conzonaninos + d_conzonasverdes + d_enconjuntocerrado +
+           est2 + est3 + est4 + est5 + est6 +
+           d_sobreviaprincipal + d_sobreviasecundaria + Dist_parq,
+         data = df)
+
+# Modelo 2: Log-lineal (preferido)
+m2 <- lm(ln_precio ~ AREA + cuartos + banos + garajes + garaje_indep +
+           VALORADMON + t_sobreplano + t_estrenar + t_0_5 + t_5_10 +
+           t_10_20 + t_remodelado +
+           d_conbalcon + d_concanchasquash + d_congimnasio +
+           d_conjardininterior + d_conjaulagolf + d_conpiscina +
+           d_consauna + d_conzonaninos + d_conzonasverdes + d_enconjuntocerrado +
+           est2 + est3 + est4 + est5 + est6 +
+           d_sobreviaprincipal + d_sobreviasecundaria + Dist_parq,
+         data = df)
+
+# ---- 4. RESULTADOS ----
+summary(m1)
+summary(m2)
+
+# ---- 5. VALORES PREDICHOS ----
+df$precio_predicho_m1 <- predict(m1)
+df$precio_predicho_m2 <- exp(predict(m2))  # revertir el log
+```
