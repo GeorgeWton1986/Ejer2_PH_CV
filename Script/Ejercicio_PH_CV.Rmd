@@ -111,9 +111,42 @@ sn_vars <- c("CONBALCON","CONCANCHASQUASH","CONGIMNASIO","CONJARDININTERIOR",
              "CONJAULAGOLF","CONPISCINA","CONSAUNA","CONZONANINOS",
              "CONZONASVERDES","ENCONJUNTOCERRADO","SOBREVIAPRINCIPAL","SOBREVIASECUNDARIA")
 
+# Variables S/N → dummy (S=1, resto=0), celdas vacías = 0
 for (v in sn_vars) {
-  df[[paste0("d_", tolower(v))]] <- ifelse(df[[v]] == "S", 1, 0)
+  df[[paste0("d_", tolower(v))]] <- ifelse(!is.na(df[[v]]) & df[[v]] == "S", 1, 0)
 }
+
+# Diagnóstico
+dim(df)           # ¿cuántas filas y columnas cargó?
+sum(is.na(df$VALORVENTA))    # ¿NAs en la variable dependiente?
+sum(is.na(df$AREA))
+sum(is.na(df$Dist_parq))
+
+# Ver cuántas filas completas quedan para el modelo
+vars_modelo <- c("VALORVENTA", "AREA", "cuartos", "banos", "garajes", 
+                 "VALORADMON", "Dist_parq", "ESTRATO")
+sum(complete.cases(df[, vars_modelo]))
+
+# Verificar que todas las variables del modelo existen en df
+vars_check <- c("VALORVENTA", "ln_precio", "AREA", "cuartos", "banos", "garajes", 
+                "garaje_indep", "VALORADMON", "t_sobreplano", "t_estrenar", 
+                "t_0_5", "t_5_10", "t_10_20", "t_remodelado",
+                "d_conbalcon", "d_concanchasquash", "d_congimnasio",
+                "d_conjardininterior", "d_conjaulagolf", "d_conpiscina",
+                "d_consauna", "d_conzonaninos", "d_conzonasverdes", 
+                "d_enconjuntocerrado", "est2", "est3", "est4", "est5", "est6",
+                "d_sobreviaprincipal", "d_sobreviasecundaria", "Dist_parq")
+
+vars_check[!vars_check %in% names(df)]
+
+sapply(df[, c("cuartos", "banos", "garajes", "garaje_indep", "VALORADMON")], 
+       function(x) sum(is.na(x)))
+
+df <- df %>%
+  mutate(
+    garaje_indep = ifelse(is.na(garaje_indep), 0, garaje_indep),
+    VALORADMON   = ifelse(is.na(VALORADMON), median(VALORADMON, na.rm=TRUE), VALORADMON)
+  )
 ```
 
 ### Modelos
