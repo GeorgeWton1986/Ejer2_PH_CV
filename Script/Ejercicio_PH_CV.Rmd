@@ -81,6 +81,17 @@ df <- df %>%
     )
   )
 
+# NOMBREZONA → dummies (referencia: "Sur")
+df <- df %>%
+  mutate(
+    zona_norte      = ifelse(NOMBREZONA == "Norte", 1, 0),
+    zona_chapinero  = ifelse(NOMBREZONA == "Chapinero", 1, 0),
+    zona_noroccidente = ifelse(NOMBREZONA == "Noroccidente", 1, 0),
+    zona_centro     = ifelse(NOMBREZONA == "Centro", 1, 0),
+    zona_occidental = ifelse(NOMBREZONA == "Occidental", 1, 0)
+    # referencia: Sur
+  )
+
 # TIPOGARAJE → dummy independiente
 df <- df %>%
   mutate(garaje_indep = ifelse(TIPOGARAJE == "Independiente", 1, 0))
@@ -129,8 +140,8 @@ sum(complete.cases(df[, vars_modelo]))
 
 # Verificar que todas las variables del modelo existen en df
 vars_check <- c("VALORVENTA", "ln_precio", "AREA", "cuartos", "banos", "garajes", 
-                "garaje_indep", "VALORADMON", "t_sobreplano", "t_estrenar", 
-                "t_0_5", "t_5_10", "t_10_20", "t_remodelado",
+                "garaje_indep", "VALORADMON", 
+                "t_0_5", "t_5_10", "t_10_20",
                 "d_conbalcon", "d_concanchasquash", "d_congimnasio",
                 "d_conjardininterior", "d_conjaulagolf", "d_conpiscina",
                 "d_consauna", "d_conzonaninos", "d_conzonasverdes", 
@@ -147,6 +158,46 @@ df <- df %>%
     garaje_indep = ifelse(is.na(garaje_indep), 0, garaje_indep),
     VALORADMON   = ifelse(is.na(VALORADMON), median(VALORADMON, na.rm=TRUE), VALORADMON)
   )
+```
+### Estadisticas por estrato
+```{r pressure, echo=FALSE}
+# Filtrar área
+df <- df %>% filter(AREA > 1 & AREA <= 500)
+
+# Verificar
+cat("Observaciones restantes:", nrow(df), "\n")
+
+# Recorrer tabla descriptiva
+tabla_estrato <- df %>%
+  group_by(ESTRATO) %>%
+  summarise(
+    N = n(),
+    precio_min  = min(VALORVENTA, na.rm=TRUE),
+    precio_mean = mean(VALORVENTA, na.rm=TRUE),
+    precio_max  = max(VALORVENTA, na.rm=TRUE),
+    precio_sd   = sd(VALORVENTA, na.rm=TRUE),
+    area_min    = min(AREA, na.rm=TRUE),
+    area_mean   = mean(AREA, na.rm=TRUE),
+    area_max    = max(AREA, na.rm=TRUE),
+    area_sd     = sd(AREA, na.rm=TRUE),
+    dist_min    = min(Dist_parq, na.rm=TRUE),
+    dist_mean   = mean(Dist_parq, na.rm=TRUE),
+    dist_max    = max(Dist_parq, na.rm=TRUE)
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 1)))
+
+tabla_estrato %>%
+  kable(format = "html",
+        col.names = c("Estrato", "N",
+                      "Min", "Media", "Max", "SD",
+                      "Min", "Media", "Max", "SD",
+                      "Min", "Media", "Max"),
+        caption = "Estadísticas descriptivas por estrato") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  add_header_above(c(" " = 2,
+                     "Precio de venta ($)" = 4,
+                     "Área (m²)" = 4,
+                     "Distancia al parque (m)" = 3))
 ```
 
 ### Modelos
@@ -174,21 +225,52 @@ m2 <- lm(ln_precio ~ AREA + cuartos + banos + garajes +
            d_sobreviaprincipal + d_sobreviasecundaria + Dist_parq,
          data = df)
 
-# Modelo 3: Log-lineal (permanecen las variables significativas del modelo 2)
-
-m3 <- lm(ln_precio ~ AREA + banos + garajes + t_5_10 + t_10_20 +
-           d_enconjuntocerrado + est1 + est2 + est3 + est4 + est5 +
+# Modelo 3: Log-lineal parsimonioso con zonas
+m3 <- lm(ln_precio ~ AREA + banos + garajes + t_10_20 +
+           d_conjardininterior +
+           est2 + est3 + est4 + est5 +
            d_sobreviasecundaria + Dist_parq,
          data = df)
-
-summary(m3)
 
 # ---- 4. RESULTADOS ----
 summary(m1)
 summary(m2)
 summary(m3)
 
-# ---- 5. VALORES PREDICHOS ----
-df$precio_predicho_m1 <- predict(m1)
-df$precio_predicho_m2 <- exp(predict(m2))  # revertir el log
+```
+### Disponibilidad a pagar
+```{r pressure, echo=FALSE}
+# Precio implícito de la distancia al parque
+beta_dist <- coef(m3)["Dist_parq"]
+precio_promedio <- mean(df$VALORVENTA, na.rm = TRUE)
+dist_promedio <- mean(df$Dist_parq, na.rm = TRUE)
+
+MWTP <- beta_dist * precio_promedio
+
+cat("Beta Dist_parq:", beta_dist, "\n")
+cat("Precio promedio:", precio_promedio, "\n")
+cat("Distancia promedio:", dist_promedio, "metros\n")
+cat("MWTP (pesos por metro):", MWTP, "\n")
+cat("MWTP (millones por metro):", MWTP/1e6, "\n")
+
+```
+
+### Predecir los precios
+```{r pressure, echo=FALSE}
+# Valores predichos
+df$precio_predicho <- exp(predict(m3))
+
+# Comparación por umbral de 1000m
+comparacion <- df %>%
+  mutate(grupo = ifelse(Dist_parq < 1000, "Menos de 1000m", "1000m o más")) %>%
+  group_by(grupo) %>%
+  summarise(
+    N = n(),
+    dist_media     = mean(Dist_parq),
+    precio_pred_mean = mean(precio_predicho),
+    precio_real_mean = mean(VALORVENTA)
+  ) %>%
+  mutate(across(where(is.numeric), ~round(., 0)))
+
+print(comparacion)
 ```
