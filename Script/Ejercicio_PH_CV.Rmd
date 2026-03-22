@@ -4,9 +4,8 @@ author: "VIAFARA MORALES, JORGE ELIECER"
 date: "2026-03-18"
 output: html_document
 ---
-
+#1. PRECIOS HEDÓNICOS
 ### Instalación de paquetes
-
 ```{r ECHO=FALSE, warning=FALSE, message=FALSE}
 #Limpiar la consola
 cat("\f")
@@ -40,11 +39,13 @@ p_load(haven,        #Leer archivos .dta
        tynitex,       #Compila documentos en Latex
        pdftools,      #Leer archivos en PDF
        tidyr,         #Manipulación de datos
-       mass          #Función box-cox
+       mass,          #Función box-cox
+       countreg,      #Modelos de conteo
+       VGAM           #Modelos de conteo
       )
 ```
 
-### Lectura del archivo .xls
+### Lectura del archivo .xls Precios Hedonicos
 ```{r ECHO=FALSE, warning=FALSE, message=FALSE}
 
 # Definir URL del archivo en GitHub
@@ -274,3 +275,92 @@ comparacion <- df %>%
 
 print(comparacion)
 ```
+
+#2. COSTO DE VIAJE
+
+### Lectura del archivo .xlsx Costo de Viaje
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+
+# Definir URL del archivo en GitHub
+github_url <- "https://raw.githubusercontent.com/GeorgeWton1986/Ejer2_PH_CV/main/Data/2_CVHumedalFlorida_MECA.xlsx"
+
+temp_file <- tempfile(fileext = ".xlsx")
+download.file(github_url, temp_file, mode = "wb")
+
+df_cv <- read_excel(temp_file)
+
+# Cargar datos usando readxl
+df_cv <- read_excel(temp_file)
+```
+### Modelos
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+
+# Estadísticas descriptivas de la variable dependiente
+
+cat("Promedio de visitas:", mean(df_cv$viajes), "\n")
+cat("Mediana de visitas:", median(df_cv$viajes), "\n")
+cat("Desviación estándar:", sd(df_cv$viajes), "\n")
+
+# Verificar truncamiento - ¿hay ceros en viajes?
+cat("Visitas mínimas:", min(df_cv$viajes), "\n")
+cat("Distribución de viajes:\n")
+table(df_cv$viajes)
+
+# Modelo Poisson
+poisson1 <- glm(viajes ~ cv1 + cs1 + agua + ingmen + edad,
+                family = poisson(link = "log"),
+                data = df_cv)
+
+summary(poisson1)
+
+# Modelo Binomial Negativo
+library(MASS)
+
+nb1 <- glm.nb(viajes ~ cv1 + cs1 + agua + ingmen + edad,
+              data = df_cv)
+
+summary(nb1)
+
+# Comparar AIC
+cat("AIC Poisson:", AIC(poisson1), "\n")
+cat("AIC Binomial Negativo:", AIC(nb1), "\n")
+
+# Modelo Truncated Negative Binomial
+tnb2 <- vglm(viajes ~ cv1 + cs1 + agua + ingmen + edad,
+             family = posnegbinomial(),
+             data = df_cv)
+
+summary(tnb2)
+AIC(tnb2)
+
+# Comparar AIC los tres modelos
+cat("AIC Poisson:", AIC(poisson1), "\n")
+cat("AIC Binomial Negativo:", AIC(nb1), "\n")
+cat("AIC Truncated NB:", AIC(tnb2), "\n")
+
+```
+### Resumen de los modelos
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+#Resumen de los modelos
+library(modelsummary)
+
+modelsummary(
+  list("Poisson" = poisson1, 
+       "Binomial Negativo" = nb1, 
+       "Truncated NB" = tnb2),
+  statistic = "std.error",
+  stars = TRUE,
+  fmt = fmt_sci(digits = 3),
+  coef_rename = c("cv1" = "Costo de viaje",
+                  "cs1" = "Costo sustituto",
+                  "agua" = "Calidad agua",
+                  "ingmen" = "Ingreso mensual",
+                  "edad" = "Edad"),
+)
+
+cat("AIC Poisson:", AIC(poisson1), "\n")
+cat("AIC Binomial Negativo:", AIC(nb1), "\n")
+cat("AIC Truncated NB:", AIC(tnb2), "\n")
+
+```
+
