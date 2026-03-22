@@ -301,7 +301,7 @@ cat("Promedio de visitas:", mean(df_cv$viajes), "\n")
 cat("Mediana de visitas:", median(df_cv$viajes), "\n")
 cat("Desviación estándar:", sd(df_cv$viajes), "\n")
 
-# Verificar truncamiento - ¿hay ceros en viajes?
+# Verificar truncamiento
 cat("Visitas mínimas:", min(df_cv$viajes), "\n")
 cat("Distribución de viajes:\n")
 table(df_cv$viajes)
@@ -364,3 +364,56 @@ cat("AIC Truncated NB:", AIC(tnb2), "\n")
 
 ```
 
+### Cálculo Variación compensada 
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+# Coeficiente de costo de viaje del modelo final
+beta_cv <- coef(tnb2)["cv1"]
+
+# Promedio de visitas observadas
+mean_viajes <- mean(df_cv$viajes)
+
+# Variación compensada por persona
+VC_persona <- -mean_viajes / beta_cv
+
+cat("Beta cv1:", beta_cv, "\n")
+cat("Promedio visitas:", mean_viajes, "\n")
+cat("VC por persona ($):", VC_persona, "\n")
+
+#Contexto de los resultado obtenidos
+cat("Costo de viaje promedio:", mean(df_cv$cv1), "\n")
+cat("Ingreso mensual promedio:", mean(df_cv$ingmen), "\n")
+cat("VC como % del ingreso mensual:", 
+    (VC_persona / mean(df_cv$ingmen)) * 100, "%\n")
+
+```
+### Cálculo Variación compensada Total
+```{r ECHO=FALSE, warning=FALSE, message=FALSE}
+# Variación compensada total
+beneficiarios <- 400000
+
+VC_total <- VC_persona * beneficiarios
+
+cat("VC por persona:", VC_persona, "\n")
+cat("VC total 400.000 beneficiarios ($):", VC_total, "\n")
+cat("VC total (millones $):", VC_total/1e6, "\n")
+cat("VC total (miles de millones $):", VC_total/1e9, "\n")
+
+# Traer los valores de 1996 a 2025.
+
+# Factor de actualización 1996 → 2025 (DANE)
+inflaciones <- c(0.177, 0.167, 0.092, 0.088, 0.077, 0.070, 0.065,
+                 0.055, 0.049, 0.045, 0.057, 0.077, 0.020, 0.032,
+                 0.037, 0.024, 0.019, 0.037, 0.068, 0.057, 0.041,
+                 0.032, 0.038, 0.016, 0.056, 0.131, 0.093, 0.052, 0.051)
+
+factor_actualizacion <- prod(1 + inflaciones)
+cat("Factor de actualización 1996-2025:", round(factor_actualizacion, 2), "\n")
+
+# VC actualizada
+VC_2025_persona <- VC_persona * factor_actualizacion
+VC_2025_total   <- VC_total * factor_actualizacion
+
+cat("VC por persona en pesos 2025:", format(round(VC_2025_persona), big.mark=","), "\n")
+cat("VC total en pesos 2025 (millones):", format(round(VC_2025_total/1e6), big.mark=","), "\n")
+
+```
